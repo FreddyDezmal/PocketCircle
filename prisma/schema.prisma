@@ -1,0 +1,182 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  phone       String?  @unique
+  email       String?  @unique
+  displayName String
+  avatarUrl   String?
+  createdAt   DateTime @default(now())
+
+  groupMemberships GroupMember[]
+  contributions    Contribution[]
+  payoutSlots      PayoutSlot[]
+  notifications    Notification[]
+  createdGroups    Group[]        @relation("GroupCreator")
+
+  @@map("users")
+}
+
+model Group {
+  id                 String   @id @default(uuid())
+  name               String
+  description        String?
+  inviteCode         String   @unique @default(cuid())
+  contributionAmount Decimal  @db.Decimal(10, 2)
+  frequency          Frequency
+  currency           String   @default("ZAR")
+  isActive           Boolean  @default(true)
+  createdBy          String
+  createdAt          DateTime @default(now())
+
+  creator               User                    @relation("GroupCreator", fields: [createdBy], references: [id])
+  members               GroupMember[]
+  contributionSchedules ContributionSchedule[]
+  payoutSlots           PayoutSlot[]
+
+  @@map("groups")
+}
+
+model GroupMember {
+  id       String     @id @default(uuid())
+  groupId  String
+  userId   String
+  role     MemberRole @default(MEMBER)
+  joinedAt DateTime   @default(now())
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@map("group_members")
+}
+
+model ContributionSchedule {
+  id          String         @id @default(uuid())
+  groupId     String
+  dueDate     DateTime
+  periodLabel String
+  status      ScheduleStatus @default(PENDING)
+  createdAt   DateTime       @default(now())
+
+  group         Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  contributions Contribution[]
+
+  @@map("contribution_schedules")
+}
+
+model Contribution {
+  id          String             @id @default(uuid())
+  scheduleId  String
+  userId      String
+  amountPaid  Decimal            @db.Decimal(10, 2)
+  status      ContributionStatus @default(PENDING)
+  proofUrl    String?
+  notes       String?
+  paidAt      DateTime?
+  confirmedBy String?
+  confirmedAt DateTime?
+  createdAt   DateTime           @default(now())
+
+  schedule ContributionSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  user     User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduleId, userId])
+  @@map("contributions")
+}
+
+model PayoutSlot {
+  id            String       @id @default(uuid())
+  groupId       String
+  userId        String
+  slotOrder     Int
+  scheduledDate DateTime?
+  paidDate      DateTime?
+  status        PayoutStatus @default(PENDING)
+  notes         String?
+  createdAt     DateTime     @default(now())
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, slotOrder])
+  @@map("payout_slots")
+}
+
+model Notification {
+  id        String             @id @default(uuid())
+  userId    String
+  groupId   String?
+  type      NotificationType
+  channel   NotificationChannel
+  message   String
+  status    NotificationStatus @default(PENDING)
+  sentAt    DateTime?
+  createdAt DateTime           @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+enum Frequency {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum ScheduleStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+}
+
+enum ContributionStatus {
+  PENDING
+  PAID
+  MISSED
+  LATE
+}
+
+enum PayoutStatus {
+  PENDING
+  SCHEDULED
+  PAID
+  SKIPPED
+}
+
+enum NotificationType {
+  CONTRIBUTION_DUE
+  CONTRIBUTION_MISSED
+  CONTRIBUTION_CONFIRMED
+  PAYOUT_UPCOMING
+  PAYOUT_RECEIVED
+  MEMBER_JOINED
+  GENERAL
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
